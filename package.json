@@ -1,0 +1,51 @@
+{
+  "name": "@stellayazilim/mcp-starlight",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Give any Astro Starlight docs site an MCP server. Build-time catalog + stdio server over npx — no hosting required, works on GitHub Pages. Locale- and version-aware.",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "astro",
+    "starlight",
+    "astro-integration",
+    "documentation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stellayazilim/mcp-starlight.git"
+  },
+  "exports": {
+    ".": "./src/integration.mjs",
+    "./catalog": "./src/catalog.mjs"
+  },
+  "bin": {
+    "mcp-starlight": "./src/server.mjs"
+  },
+  "files": ["src", "README.md"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test test/catalog.test.mjs test/integration.test.mjs test/load.test.mjs test/tools.test.mjs",
+    "test:coverage": "node --test --experimental-test-coverage test/catalog.test.mjs test/integration.test.mjs test/load.test.mjs test/tools.test.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "yaml": "^2.6.1",
+    "zod": "^3.25.76"
+  },
+  "peerDependencies": {
+    "astro": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "astro": {
+      "optional": true
+    }
+  }
+}

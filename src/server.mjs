@@ -1,0 +1,46 @@
+#!/usr/bin/env node
+/**
+ * MCP server for a Starlight docs site — stdio transport.
+ *
+ * The client spawns this on the reader's machine and talks JSON-RPC over
+ * stdin/stdout, so the docs site itself never has to answer a POST. That is the
+ * whole point: MCP is JSON-RPC, a static host cannot answer it, but the process
+ * that can does not have to be hosted — it can run wherever the reader is.
+ *
+ *   npx @stellayazilim/mcp-starlight https://example.com/mcp-catalog.json
+ *
+ * Or against a local build while writing docs:
+ *
+ *   npx @stellayazilim/mcp-starlight ./dist/mcp-catalog.json
+ */
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { loadCatalog } from "./load.mjs";
+import { createServer } from "./mcp.mjs";
+
+function usage() {
+  return [
+    "Usage: mcp-starlight <catalog-url|path|site-url>",
+    "",
+    "  https://example.com/mcp-catalog.json   the published catalog",
+    "  https://example.com                    site root; /mcp-catalog.json is appended",
+    "  ./dist/mcp-catalog.json                a local build",
+    "",
+    "Environment: MCP_STARLIGHT_CATALOG is used when no argument is given.",
+  ].join("\n");
+}
+
+const arg = process.argv[2] ?? process.env.MCP_STARLIGHT_CATALOG;
+
+if (!arg || arg === "--help" || arg === "-h") {
+  console.error(usage());
+  process.exit(arg ? 0 : 1);
+}
+
+const { source, catalog } = await loadCatalog(arg);
+const server = createServer(catalog, { McpServer });
+
+await server.connect(new StdioServerTransport());
+
+// stdout is the JSON-RPC channel; diagnostics have to go to stderr.
+console.error(`mcp-starlight ready — ${catalog.pages.length} pages from ${source}`);
