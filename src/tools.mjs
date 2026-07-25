@@ -6,6 +6,7 @@
  * site is not cluttered with a tool that would always come back empty.
  */
 import { z } from "zod";
+import { staticStore } from "./store.mjs";
 
 /**
  * Ranks a candidate. Title matches dominate body matches: someone searching a
@@ -37,6 +38,11 @@ function urlFor(catalog, route) {
   return catalog.site ? `${catalog.site}${route}` : route;
 }
 
+/** Collections that have something in them, as `[name, group]` pairs. */
+function liveCollections(catalog) {
+  return Object.entries(catalog.collections ?? {}).filter(([, c]) => c?.entries?.length);
+}
+
 function filterPages(catalog, { locale, version }) {
   return catalog.pages.filter((page) => {
     if (locale !== undefined && (page.locale ?? null) !== (locale || null)) return false;
@@ -45,7 +51,23 @@ function filterPages(catalog, { locale, version }) {
   });
 }
 
-export function registerTools(server, catalog) {
+/**
+ * @param {object} server
+ * @param {object} storeOrCatalog
+ *        A catalog store, or a bare catalog for callers that do not need
+ *        refreshing (tests, and anything embedding a catalog it built itself).
+ *
+ * Tool *schemas* are fixed at registration — MCP clients cache the tool list, so
+ * the locale/version enums and whether `search_reference` exists are decided from
+ * the catalog present now. Tool *answers* are not: every handler reads through
+ * the store, so a refreshed catalog is served immediately. A site that adds a
+ * whole new locale mid-session is the one case that needs a client restart.
+ */
+export function registerTools(server, storeOrCatalog) {
+  const store = storeOrCatalog?.ensureFresh
+    ? storeOrCatalog
+    : staticStore(storeOrCatalog);
+  const catalog = store.current;
   const label = catalog.siteLabel ?? "the documentation";
 
   const localeEnum =
@@ -90,6 +112,7 @@ export function registerTools(server, catalog) {
       },
     },
     async ({ query, limit, locale, version }) => {
+      const catalog = await store.ensureFresh();
       const scope = scopeOf({ locale, version });
       const ranked = filterPages(catalog, scope)
         .map((page) => ({ page, s: score(query, page.title, `${page.description} ${page.body}`) }))
@@ -129,6 +152,7 @@ export function registerTools(server, catalog) {
       },
     },
     async ({ route }) => {
+      const catalog = await store.ensureFresh();
       const normalized = route.replace(/\/+$/, "") || "/";
       const page =
         catalog.pages.find((p) => p.route === route) ??
@@ -163,6 +187,7 @@ export function registerTools(server, catalog) {
       inputSchema: scopeSchema,
     },
     async ({ locale, version }) => {
+      const catalog = await store.ensureFresh();
       const pages = filterPages(catalog, scopeOf({ locale, version }));
       if (pages.length === 0) return text("No pages match that scope.");
 
@@ -181,9 +206,7 @@ export function registerTools(server, catalog) {
 
   // Only registered when the site actually published structured data, so a plain
   // docs site never sees a tool that can only answer "nothing here".
-  const collections = Object.entries(catalog.collections ?? {}).filter(
-    ([, c]) => c?.entries?.length,
-  );
+  const collections = liveCollections(catalog);
 
   if (collections.length > 0) {
     const names = collections.map(([name]) => name);
@@ -206,9 +229,13 @@ export function registerTools(server, catalog) {
         },
       },
       async ({ query, collection, limit }) => {
+        // Re-derived rather than reusing the pairs captured above: a refresh
+        // replaces the entries, and searching the ones from startup would be the
+        // staleness this whole mechanism exists to remove.
+        const fresh = liveCollections(await store.ensureFresh());
         const searched = collection
-          ? collections.filter(([name]) => name === collection)
-          : collections;
+          ? fresh.filter(([name]) => name === collection)
+          : fresh;
 
         const ranked = [];
         for (const [name, group] of searched) {

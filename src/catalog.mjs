@@ -8,6 +8,7 @@
  * Starlight's layout throughout. It also means the catalog can be generated
  * without running a build at all, which is what makes the CLI useful in CI.
  */
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -154,6 +155,23 @@ export function collectPages({
  * here and it becomes searchable alongside the prose, without this package
  * needing to know what it is.
  */
+/**
+ * Fingerprint of a catalog's contents, used to tell a stale copy from a current
+ * one without comparing the whole thing.
+ *
+ * `revision` is excluded from its own input, so re-running this over a finished
+ * catalog reproduces the stored value — a client can verify what it was given
+ * rather than trusting the field.
+ *
+ * This is the fallback. A build that knows its provenance should pass an
+ * explicit revision instead (a commit SHA), which is traceable in a way a
+ * content hash is not.
+ */
+export function catalogRevision(catalog) {
+  const { revision, ...content } = catalog;
+  return createHash("sha256").update(JSON.stringify(content)).digest("hex").slice(0, 16);
+}
+
 export function buildCatalog({
   site,
   siteLabel,
@@ -162,8 +180,12 @@ export function buildCatalog({
   locales = [],
   versions = [],
   collections = {},
+  revision,
 }) {
-  return {
+  const catalog = {
+    // Schema version. Bumped when the shape changes, NOT when the content does —
+    // that is what `revision` is for, and conflating the two is why a client
+    // cannot tell staleness from this field.
     version: 1,
     site,
     siteLabel,
@@ -173,4 +195,6 @@ export function buildCatalog({
     pages,
     collections,
   };
+
+  return { ...catalog, revision: revision || catalogRevision(catalog) };
 }

@@ -21,6 +21,17 @@ import { buildCatalog, collectPages } from "./catalog.mjs";
 const DEFAULT_FILENAME = "mcp-catalog.json";
 
 /**
+ * Name of the sentinel written beside the catalog.
+ *
+ * It exists so a client can answer "has this changed?" with one small request
+ * instead of downloading the catalog — which for a documented API surface runs
+ * to hundreds of kilobytes, and would be pulled on a timer forever.
+ */
+export function versionFilenameFor(filename) {
+  return `${filename.replace(/\.json$/i, "")}.version.json`;
+}
+
+/**
  * Astro's `i18n.locales` is either `["en", "tr"]` or
  * `[{ path: "tr", codes: [...] }]`, and Starlight generates whichever suits the
  * config it was given. Treating it as an object yields `["0", "1"]` — array
@@ -59,6 +70,12 @@ export function originFor(site, base) {
  *        Structured entries to publish alongside the prose, or a function
  *        returning them. Anything shaped `{ name: { label, entries: [...] } }`
  *        becomes searchable; entries need `id`, `title`, and free-form fields.
+ * @param {string} [options.revision]
+ *        Identifier for this build of the catalog, published in the sentinel so
+ *        clients can detect a new one. Pass the commit it was built from —
+ *        `process.env.GITHUB_SHA` in Actions — to make a served catalog
+ *        traceable to a source revision. Defaults to a hash of the catalog's
+ *        contents, which changes only when the content does.
  */
 export default function starlightMcp(options = {}) {
   const {
@@ -67,6 +84,7 @@ export default function starlightMcp(options = {}) {
     versions = [],
     exclude = [],
     collections = {},
+    revision,
   } = options;
 
   let config;
@@ -112,10 +130,24 @@ export default function starlightMcp(options = {}) {
           locales,
           versions,
           collections: resolvedCollections,
+          revision,
         });
 
-        const target = path.join(fileURLToPath(dir), filename);
-        fs.writeFileSync(target, JSON.stringify(catalog), "utf8");
+        const outDir = fileURLToPath(dir);
+        fs.writeFileSync(path.join(outDir, filename), JSON.stringify(catalog), "utf8");
+
+        // Written second so a client that reads the sentinel and then fetches the
+        // catalog can never see a new revision pointing at the old file.
+        const versionFilename = versionFilenameFor(filename);
+        fs.writeFileSync(
+          path.join(outDir, versionFilename),
+          JSON.stringify({
+            schema: catalog.version,
+            revision: catalog.revision,
+            generatedAt: new Date().toISOString(),
+          }),
+          "utf8",
+        );
 
         const extra = Object.values(resolvedCollections).reduce(
           (n, c) => n + (c.entries?.length ?? 0),
@@ -124,7 +156,7 @@ export default function starlightMcp(options = {}) {
         logger.info(
           `MCP catalog: ${pages.length} pages` +
             (extra ? ` + ${extra} collection entries` : "") +
-            ` -> /${filename}`,
+            ` -> /${filename} (revision ${catalog.revision}, /${versionFilename})`,
         );
       },
     },

@@ -17,6 +17,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadCatalog } from "./load.mjs";
 import { createServer } from "./mcp.mjs";
+import { createCatalogStore, DEFAULT_TTL_MS } from "./store.mjs";
 
 function usage() {
   return [
@@ -26,7 +27,9 @@ function usage() {
     "  https://example.com                    site root; /mcp-catalog.json is appended",
     "  ./dist/mcp-catalog.json                a local build",
     "",
-    "Environment: MCP_STARLIGHT_CATALOG is used when no argument is given.",
+    "Environment:",
+    "  MCP_STARLIGHT_CATALOG    used when no argument is given",
+    `  MCP_STARLIGHT_TTL_MS     ms between staleness checks (default ${DEFAULT_TTL_MS}; 0 checks every call)`,
   ].join("\n");
 }
 
@@ -38,9 +41,28 @@ if (!arg || arg === "--help" || arg === "-h") {
 }
 
 const { source, catalog } = await loadCatalog(arg);
-const server = createServer(catalog, { McpServer });
+
+const ttlEnv = Number(process.env.MCP_STARLIGHT_TTL_MS);
+const ttlMs = Number.isFinite(ttlEnv) && ttlEnv >= 0 ? ttlEnv : undefined;
+
+const store = createCatalogStore({
+  source,
+  catalog,
+  ...(ttlMs === undefined ? {} : { ttlMs }),
+  onRefresh: ({ from, to, catalog: next }) =>
+    console.error(
+      `mcp-starlight refreshed — revision ${from ?? "unknown"} -> ${to}, ${next.pages.length} pages`,
+    ),
+  onError: (error) =>
+    console.error(`mcp-starlight: staleness check failed, serving the loaded catalog (${error.message})`),
+});
+
+const server = createServer(store, { McpServer });
 
 await server.connect(new StdioServerTransport());
 
 // stdout is the JSON-RPC channel; diagnostics have to go to stderr.
-console.error(`mcp-starlight ready — ${catalog.pages.length} pages from ${source}`);
+console.error(
+  `mcp-starlight ready — ${catalog.pages.length} pages from ${source}` +
+    (catalog.revision ? ` (revision ${catalog.revision})` : " (no revision published; staleness checks will no-op)"),
+);
