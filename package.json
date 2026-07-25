@@ -1,6 +1,6 @@
 {
   "name": "@stellayazilim/mcp-starlight",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Give any Astro Starlight docs site an MCP server. Build-time catalog + stdio server over npx — no hosting required, works on GitHub Pages. Locale- and version-aware.",
   "license": "MIT",
