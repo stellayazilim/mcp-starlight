@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { localeSegments, originFor } from "../src/integration.mjs";
+import { localeSegments, originFor, versionFilenameFor } from "../src/integration.mjs";
 
 describe("localeSegments", () => {
   // Regression: Astro's i18n.locales is an array, not an object. Treating it as
@@ -67,5 +67,15 @@ describe("originFor", () => {
   it("returns null when there is no site", () => {
     assert.equal(originFor(null, "/repo"), null);
     assert.equal(originFor(undefined, ""), null);
+  });
+});
+
+describe("versionFilenameFor", () => {
+  it("puts the sentinel beside the catalog", () => {
+    assert.equal(versionFilenameFor("mcp-catalog.json"), "mcp-catalog.version.json");
+  });
+
+  it("follows a custom catalog filename", () => {
+    assert.equal(versionFilenameFor("api.json"), "api.version.json");
   });
 });

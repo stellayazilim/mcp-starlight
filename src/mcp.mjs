@@ -7,12 +7,17 @@
  */
 import { registerTools } from "./tools.mjs";
 
-export function createServer(catalog, { McpServer, version = "0.1.0" }) {
+/**
+ * @param {object} storeOrCatalog a catalog store, or a bare catalog
+ */
+export function createServer(storeOrCatalog, { McpServer, version = "0.2.0" }) {
+  const catalog = storeOrCatalog?.ensureFresh ? storeOrCatalog.current : storeOrCatalog;
+
   const server = new McpServer({
     name: catalog.siteLabel ? `${catalog.siteLabel} docs` : "starlight-docs",
     version,
   });
 
-  registerTools(server, catalog);
+  registerTools(server, storeOrCatalog);
   return server;
 }

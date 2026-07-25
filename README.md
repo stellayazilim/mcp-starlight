@@ -82,6 +82,7 @@ starlightMcp({
   exclude: ['api'],               // content directories to leave out
   filename: 'mcp-catalog.json',   // output name inside the build
   collections: { … },             // structured data — object or function
+  revision: process.env.GITHUB_SHA, // identifies this build of the catalog
 })
 ```
 
@@ -95,6 +96,45 @@ stripped, so `exclude: ['api']` covers `api/`, `tr/api/`, `preview/api/` and
 
 **`locales`** need no configuration — they are read from the Astro i18n config
 that Starlight generates.
+
+**`revision`** identifies this build of the catalog. Pass the commit it came from
+— `process.env.GITHUB_SHA` in Actions — and a served catalog is traceable to a
+source revision. Left unset it defaults to a hash of the catalog's contents,
+which changes only when the content does. Either way it drives staleness
+detection, below.
+
+## Staying current
+
+Docs sites redeploy; long-lived MCP clients do not restart. A server that read
+its catalog once at startup will keep answering from it for days, and nothing in
+its replies says so — which is the kind of wrong that is worth preventing rather
+than documenting.
+
+Each build writes a small sentinel beside the catalog:
+
+```
+/mcp-catalog.json           the catalog
+/mcp-catalog.version.json   { "schema": 1, "revision": "…", "generatedAt": "…" }
+```
+
+Before answering a tool call the server compares the published revision against
+the one it loaded, and re-fetches the catalog only when they differ. The check
+costs one request of a few dozen bytes; the catalog itself — which for a
+documented API surface runs to hundreds of kilobytes — is pulled only when it
+actually changed.
+
+The checks are throttled and opportunistic: at most one per minute, and only
+while tool calls are arriving, so an idle server makes no requests at all. Set
+`MCP_STARLIGHT_TTL_MS` to change the interval, or `0` to check on every call.
+
+Failure is deliberately quiet. A sentinel that is missing (an older site) or
+unreachable (a blip) leaves the loaded catalog in place — being possibly one
+revision behind beats answering with an error.
+
+One limit worth knowing: tool *schemas* are fixed when the client connects,
+because MCP clients cache the tool list. A refresh updates every answer, but a
+site that adds a whole new locale or documentation line mid-session needs a
+client restart before that facet appears as a filter.
 
 ## Structured collections
 

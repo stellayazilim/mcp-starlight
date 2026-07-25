@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { assertCatalog, loadCatalog, resolveCatalogUrl } from "../src/load.mjs";
+import {
+  assertCatalog,
+  loadCatalog,
+  loadRevision,
+  resolveCatalogUrl,
+  versionSourceFor,
+} from "../src/load.mjs";
 
 describe("resolveCatalogUrl", () => {
   it("returns a full catalog URL unchanged", () => {
@@ -71,5 +77,65 @@ describe("loadCatalog", () => {
       loadCatalog("./x.json", { readFile }),
       /not an mcp-starlight catalog/,
     );
+  });
+});
+
+describe("versionSourceFor", () => {
+  it("derives the sentinel from a catalog URL", () => {
+    assert.equal(
+      versionSourceFor("https://x.com/mcp-catalog.json"),
+      "https://x.com/mcp-catalog.version.json",
+    );
+  });
+
+  it("derives it from a bare site URL too", () => {
+    assert.equal(
+      versionSourceFor("https://x.com/docs"),
+      "https://x.com/docs/mcp-catalog.version.json",
+    );
+  });
+
+  it("works for a filesystem path", () => {
+    assert.equal(
+      versionSourceFor("./dist/mcp-catalog.json"),
+      "./dist/mcp-catalog.version.json",
+    );
+  });
+});
+
+describe("loadRevision", () => {
+  const ok = (body) => ({ ok: true, json: async () => body });
+
+  it("reads the revision from the sentinel", async () => {
+    const revision = await loadRevision("https://x.com/mcp-catalog.json", {
+      fetchImpl: async (url) => {
+        assert.equal(url, "https://x.com/mcp-catalog.version.json");
+        return ok({ revision: "deadbeef" });
+      },
+    });
+    assert.equal(revision, "deadbeef");
+  });
+
+  it("returns null when the sentinel is missing", async () => {
+    const revision = await loadRevision("https://x.com/mcp-catalog.json", {
+      fetchImpl: async () => ({ ok: false, status: 404 }),
+    });
+    assert.equal(revision, null);
+  });
+
+  it("returns null rather than throwing when the fetch fails", async () => {
+    const revision = await loadRevision("https://x.com/mcp-catalog.json", {
+      fetchImpl: async () => {
+        throw new Error("offline");
+      },
+    });
+    assert.equal(revision, null);
+  });
+
+  it("returns null for a sentinel that is not JSON", async () => {
+    const revision = await loadRevision("./dist/mcp-catalog.json", {
+      readFile: () => "<html>404</html>",
+    });
+    assert.equal(revision, null);
   });
 });

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   buildCatalog,
+  catalogRevision,
   collectPages,
   parseFrontmatter,
   routeFor,
@@ -206,5 +207,34 @@ describe("buildCatalog", () => {
     assert.deepEqual(catalog.locales, ["tr"]);
     assert.deepEqual(catalog.versions, ["preview"]);
     assert.equal(catalog.collections.api.entries.length, 1);
+  });
+});
+
+describe("catalog revision", () => {
+  const base = { site: "https://x.com", siteLabel: "X", pages: [{ route: "/a" }] };
+
+  it("is reproducible from the finished catalog", () => {
+    const catalog = buildCatalog(base);
+    assert.equal(catalogRevision(catalog), catalog.revision);
+  });
+
+  it("is stable across builds of identical content", () => {
+    assert.equal(buildCatalog(base).revision, buildCatalog(base).revision);
+  });
+
+  it("changes when the content does", () => {
+    const changed = buildCatalog({ ...base, pages: [{ route: "/b" }] });
+    assert.notEqual(buildCatalog(base).revision, changed.revision);
+  });
+
+  it("prefers an explicit revision over the content hash", () => {
+    const catalog = buildCatalog({ ...base, revision: "abc123" });
+    assert.equal(catalog.revision, "abc123");
+  });
+
+  it("keeps the schema version separate from the content revision", () => {
+    const catalog = buildCatalog(base);
+    assert.equal(catalog.version, 1);
+    assert.notEqual(catalog.version, catalog.revision);
   });
 });
