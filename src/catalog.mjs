@@ -46,17 +46,47 @@ export function routeFor(relativePath, { base = "" } = {}) {
 }
 
 /**
+ * Code, fenced or inline, as one alternation so the body can be split on it.
+ *
+ * Fences come first so a fence is consumed whole rather than being chopped into
+ * inline spans by the backticks that open it.
+ */
+const CODE = /(`{3,}[\s\S]*?`{3,}|`[^`\n]+`)/g;
+
+/**
+ * Applies `transform` to the prose, leaving code exactly as written.
+ *
+ * The MDX strippers cannot tell a component from a generic — `<Callout>` and
+ * `<TResult>` are the same shape — and for a typed language the documentation is
+ * mostly the latter. Running them across code silently ate type parameters and
+ * every PascalCase XML element, so `ICommandHandler<CreateProduct, Guid>` reached
+ * the model as `ICommandHandler` and an MSBuild property block as its value alone.
+ */
+function preservingCode(body, transform) {
+  // Splitting on a capturing group interleaves the pieces: even indices are
+  // prose, odd ones are the code that separated them. Transforming only the even
+  // ones needs no placeholder, and so cannot collide with anything the document
+  // happens to contain.
+  return body
+    .split(CODE)
+    .map((part, i) => (i % 2 === 1 ? part : transform(part)))
+    .join("");
+}
+
+/**
  * Strips the markup that only matters to a renderer, so what reaches the model
- * is prose. Code fences are kept — they are usually the answer.
+ * is prose. Code — fenced or inline — is kept verbatim; it is usually the answer.
  */
 export function toPlainish(body) {
-  return body
-    .replace(/^import\s+.*$/gm, "")
-    .replace(/\{%\s*\/?[\s\S]*?%\}/g, "")
-    .replace(/<\/?[A-Z][\w.]*(\s[^>]*)?\/?>/g, "")
-    .replace(/^:{3}\w*\s*$/gm, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return preservingCode(body, (prose) =>
+    prose
+      .replace(/^import\s+.*$/gm, "")
+      .replace(/\{%\s*\/?[\s\S]*?%\}/g, "")
+      .replace(/<\/?[A-Z][\w.]*(\s[^>]*)?\/?>/g, "")
+      .replace(/^:{3}\w*\s*$/gm, "")
+      // Runs per prose chunk, so blank lines inside a fence are never touched.
+      .replace(/\n{3,}/g, "\n\n"),
+  ).trim();
 }
 
 function detectLocale(segments, locales) {
@@ -148,14 +178,6 @@ export function collectPages({
 }
 
 /**
- * Assembles the published artifact.
- *
- * `collections` is the extension point: a site with structured data of its own —
- * a generated .NET or TypeScript API surface, a changelog, a schema — passes it
- * here and it becomes searchable alongside the prose, without this package
- * needing to know what it is.
- */
-/**
  * Fingerprint of a catalog's contents, used to tell a stale copy from a current
  * one without comparing the whole thing.
  *
@@ -172,6 +194,14 @@ export function catalogRevision(catalog) {
   return createHash("sha256").update(JSON.stringify(content)).digest("hex").slice(0, 16);
 }
 
+/**
+ * Assembles the published artifact.
+ *
+ * `collections` is the extension point: a site with structured data of its own —
+ * a generated .NET or TypeScript API surface, a changelog, a schema — passes it
+ * here and it becomes searchable alongside the prose, without this package
+ * needing to know what it is.
+ */
 export function buildCatalog({
   site,
   siteLabel,

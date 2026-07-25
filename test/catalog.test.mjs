@@ -238,3 +238,56 @@ describe("catalog revision", () => {
     assert.notEqual(catalog.version, catalog.revision);
   });
 });
+
+describe("toPlainish and code", () => {
+  it("keeps generic type parameters in inline code", () => {
+    const out = toPlainish("Implement `ICommandHandler<CreateProduct, Guid>` and `ICommand<TResult>`.");
+    assert.match(out, /ICommandHandler<CreateProduct, Guid>/);
+    assert.match(out, /ICommand<TResult>/);
+  });
+
+  it("keeps XML elements inside a fence", () => {
+    const body = [
+      "Turn it off:",
+      "",
+      "```xml",
+      "<PropertyGroup>",
+      "  <ErgosfareSourceGeneratorScanReferences>false</ErgosfareSourceGeneratorScanReferences>",
+      "</PropertyGroup>",
+      "```",
+    ].join("\n");
+
+    const out = toPlainish(body);
+    assert.match(out, /<PropertyGroup>/);
+    assert.match(out, /<ErgosfareSourceGeneratorScanReferences>false<\/ErgosfareSourceGeneratorScanReferences>/);
+  });
+
+  it("still strips components from the prose around code", () => {
+    const body = "<Callout type='note'>\n\nUse `List<int>` here.\n\n</Callout>";
+    const out = toPlainish(body);
+
+    assert.doesNotMatch(out, /Callout/, "a real component should still go");
+    assert.match(out, /List<int>/, "code between components must survive");
+  });
+
+  it("does not let a fence swallow the prose after it", () => {
+    const out = toPlainish("```\ncode\n```\n\n<Aside />\n\nTail `T<U>` text.");
+    assert.doesNotMatch(out, /Aside/);
+    assert.match(out, /Tail `T<U>` text\./);
+  });
+
+  it("leaves blank lines inside a fence alone", () => {
+    const out = toPlainish("```csharp\na();\n\n\n\nb();\n```");
+    assert.match(out, /a\(\);\n\n\n\nb\(\);/);
+  });
+
+  it("still collapses blank runs in prose", () => {
+    assert.equal(toPlainish("a\n\n\n\nb"), "a\n\nb");
+  });
+
+  it("strips markdoc tags but not code that mentions them", () => {
+    const out = toPlainish("{% aside %}\ntext\n{% /aside %}\n\n`{% raw %}`");
+    assert.doesNotMatch(out, /aside/);
+    assert.match(out, /`\{% raw %\}`/);
+  });
+});

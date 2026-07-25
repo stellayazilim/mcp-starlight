@@ -10,7 +10,7 @@ import { registerTools } from "./tools.mjs";
 /**
  * @param {object} storeOrCatalog a catalog store, or a bare catalog
  */
-export function createServer(storeOrCatalog, { McpServer, version = "0.2.0" }) {
+export function createServer(storeOrCatalog, { McpServer, version = "0.2.1" }) {
   const catalog = storeOrCatalog?.ensureFresh ? storeOrCatalog.current : storeOrCatalog;
 
   const server = new McpServer({
